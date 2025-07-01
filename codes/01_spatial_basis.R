@@ -46,6 +46,11 @@ geometry_dep <- geometry_dep %>%
 rm("corsica")
 rm("new_corsica")
 
+saveRDS(geometry_dep,
+        "pcr_hsv/clean_data/input_models/map_fr.RDS")
+
+
+
 
 # Adding region names -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 geometry_reg <-
@@ -136,9 +141,12 @@ nb_list %>%
 
 
 # Queen lagged ------------------------------------------------------------
-queenlag2 <- spdep::nblag(queen_contiguity_nbobject = nb, maxlag = 2)
-queenlag3 <- spdep::nblag(queen_contiguity_nbobject = nb, maxlag = 3)
-
+queenlag2 <- spdep::nblag_cumul(nblag(queen_contiguity_nbobject, maxlag = 2))
+# SPDED to INLA graph
+spdep::nb2INLA(
+  "pcr_hsv/clean_data/input_models/inla_graph_districts_queenlag2.graph",
+  queenlag2
+)
 
 
 
@@ -148,6 +156,7 @@ spatial_objects <- list(
   geometry_reg = geometry_reg %>% mutate(idspacereg = row_number()),
   centroids = centroids,
   nb = list('queen' = queen_contiguity_nbobject,
+            'queenlag2' = queenlag2,
             'delaunay' = delaunay_nbobject,
             'soi' = soi_nbobject,
             'gab_nbobject' = gab_nbobject,

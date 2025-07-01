@@ -52,7 +52,6 @@ names(list_graph) <-
 raw_data <-
   readRDS(file = "pcr_hsv/clean_data/input_models/raw_data.RDS")
 
-# Removing inhib test
 raw_data <- raw_data %>%
   dplyr::select(year,
                 year_week,
@@ -61,8 +60,7 @@ raw_data <- raw_data %>%
                 age,
                 hspcr_2,
                 nature,
-                n_dossier) %>%
-  filter(hspcr_2 != "inhib")
+                n_dossier) 
 
 spatial_objects$geometry_dep$geometry <- NULL
 spatial_objects$geometry_reg$geometry <- NULL
@@ -113,7 +111,10 @@ raw_data <- raw_data %>%
     N = 1
   ) %>%
   mutate(groupsex = ifelse(females == 1, 2, 1),
-         groupyear = ifelse(year == "2022", 1, 2),
+         groupyear =   case_when(year == "2022" ~ 1,
+                                 year == "2023" ~ 2,
+                                 year == "2024" ~ 3,
+                                 year == "2025" ~ 4),
          sexe = ifelse(females == 1, "Females", "Males")) %>%
   mutate(idage = age + 1) %>%
   dplyr::select(-hspcr_2,
@@ -139,16 +140,25 @@ aggregated <- aggregated%>%
   ungroup()
 
 
-dfdate <- tibble(date = seq(as.Date("2022-01-01"), as.Date("2023-12-31"), "1 day"))  %>% 
-  mutate(year = year(date),
-         week = week(date),
-         year_week = paste0(year,"_",week)) %>%  
+dfdate <- tibble(date = seq(as.Date("2021-01-01"), as.Date("2025-01-31"), "1 day"))  %>% 
+  mutate(year = isoyear(date),
+         week = isoweek(date),
+         year_week = paste0(year,"_",week)) %>%
   arrange(year, week) %>% 
   distinct(year_week, .keep_all = T) %>% 
   mutate(idtime = row_number())
 
 aggregated <- aggregated %>% 
   left_join(dfdate, by = c("year_week", "year"))
+
+min(aggregated$week)
+max(aggregated$date)
+dfdate <- dfdate %>% 
+  filter(idtime >= min(aggregated$idtime)) %>% 
+  filter(idtime <= max(aggregated$idtime)) %>% 
+  mutate(idtime = idtime - min(idtime) + 1)
+aggregated <- aggregated %>% 
+  mutate(idtime = idtime - min(idtime)+1)
 
 # Save --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 save.image("pcr_hsv/clean_data/input_models/data_for_fit.rda")

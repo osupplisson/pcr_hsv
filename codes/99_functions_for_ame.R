@@ -1,37 +1,22 @@
 # Function for Posterior predictive check----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-pp_check_function <- function(fit_input, Nsample = 100) {
-  dfbinomial <- dfbinomial %>%
-    mutate(
-      ageclass = cut(age, seq(0, 100, 10), include.lowest = TRUE),
-      ageclassbis = cut(
-        age,
-        breaks = c(0, 24, 100),
-        include.lowest = TRUE
-      )
-    )
-  
-  if (!exists("state")) {
-    draw_pp <- generate(
-      object = fit_input,
-      newdata = dfbinomial,
-      n.samples = Nsample,
-      seed = 123,
-      formula = fml
-    )
-  } else{
-    print("Using state")
-    draw_pp <- inlabru::evaluate_model(
-      model = fit_input$bru_info$model,
-      state = state,
-      data = dfbinomial,
-      predictor = fml
-    )
-  }
-  
-  draw_pp <- draw_pp %>%
-    imap(~ cbind(.x, dfbinomial)) %>%
-    imap(~ .x %>% mutate(sampleid = .y)) %>%
+pp_check_function <- function(draws = draw_pp) {
+  library(tidytable)
+  setDTthreads(threads = cpudt)
+  draw_pp <- draws %>%
+    imap(function(.x, .y) {
+      m <- .y
+      .x %>%
+        imap(
+          ~ .x %>%
+            mutate(
+              sample = paste(m, .y, sep = "_")
+            ) %>%
+            cbind(., dfbinomial %>% st_drop_geometry())
+        ) %>%
+        do.call(rbind, .)
+    }) %>%
     do.call(rbind, .)
+  detach("package:tidytable", unload = TRUE)
   
   
   draw_pp <-  draw_pp %>%
@@ -44,20 +29,36 @@ pp_check_function <- function(fit_input, Nsample = 100) {
       )
     )
   
+  dfbinomial <- dfbinomial %>%
+    mutate(
+      ageclass = cut(age, seq(0, 100, 10), include.lowest = TRUE),
+      ageclassbis = cut(
+        age,
+        breaks = c(0, 24, 100),
+        include.lowest = TRUE
+      )
+    )
+  
+  print(colnames(dfbinomial))
+  print(colnames(draw_pp))
   
   fun_sum <- function(vect = c("virus", "ageclass", "sexe", "year", "nom"),
                       type) {
+    print(vect)
+    print(type)
+    library(tidytable)
+    setDTthreads(threads = cpudt)
     obs_exp <- dfbinomial %>%
-      group_by_at(vect) %>%
+      group_by(all_of(vect)) %>%
       summarise(obs = sum(result), Ntot = sum(N)) %>%
       ungroup() %>%
       mutate(prop = obs / Ntot)
     
     obs_prop <- dfbinomial %>%
-      group_by_at(vect) %>%
+      group_by(all_of(vect)) %>%
       summarise(obs = sum(result), Ntot = sum(N)) %>%
       ungroup() %>%
-      group_by_at(c(vect[-which(vect == "virus")])) %>%
+      group_by(all_of(c(vect[-which(vect == "virus")]))) %>%
       mutate(x = ifelse(virus == "hsv2", 1, 0)) %>%
       arrange(x) %>%
       mutate(Ntot = obs + obs[1],
@@ -71,51 +72,54 @@ pp_check_function <- function(fit_input, Nsample = 100) {
         rowwise() %>%
         mutate(value = rbinom(1, size = N, prob = p)) %>%
         ungroup() %>%
-        group_by_at(c(vect, "sampleid")) %>%
-        summarise(value = sum(value), Ntot = sum(N))
+        group_by(all_of(c(vect, "sample"))) %>%
+        summarise(y = sum(value), Ntot = sum(N))
       
       proportion <- tmp  %>%
-        mutate(value = value / Ntot) %>%
-        group_by_at(vect) %>%
+        mutate(value = y / Ntot) %>%
+        group_by(all_of(vect)) %>%
         summary_draw() %>%
         left_join(obs_exp, by = vect)
       
       proportion_relative <- tmp %>%
-        group_by_at(c(vect[-which(vect == "virus")], "sampleid")) %>%
+        group_by(all_of(c(vect[-which(vect == "virus")], "sample"))) %>%
         mutate(x = ifelse(virus == "hsv2", 1, 0)) %>%
         arrange(x) %>%
-        mutate(value = value / (value + value[1])) %>%
+        mutate(value = y / (y + y[1])) %>%
         filter(virus == "hsv2") %>%
-        group_by_at(vect) %>%
+        group_by(vect) %>%
         summary_draw() %>%
         left_join(obs_prop, by = vect)
       
     } else{
       tmp <- draw_pp    %>%
         mutate(expected_n = p * N) %>%
-        group_by_at(c(vect, "sampleid")) %>%
-        summarise(value = sum(expected_n), Ntot = sum(N))
+        group_by(all_of(c(vect, "sample"))) %>%
+        summarise(y = sum(expected_n), Ntot = sum(N))
       
       proportion <- tmp %>%
-        mutate(value = value / Ntot) %>%
-        group_by_at(vect) %>%
+        mutate(value = y / Ntot) %>%
+        group_by(all_of(vect)) %>%
         summary_draw() %>%
         left_join(obs_exp, by = vect)
       
       proportion_relative <- tmp %>%
-        group_by_at(c(vect[-which(vect == "virus")], "sampleid")) %>%
+        group_by(all_of(c(vect[-which(vect == "virus")], "sample"))) %>%
         mutate(x = ifelse(virus == "hsv2", 1, 0)) %>%
         arrange(x) %>%
-        mutate(value = value / (value + value[1])) %>%
-        group_by_at(vect) %>%
+        mutate(value = y / (y + y[1])) %>%
+        group_by(vect) %>%
         summary_draw() %>%
         filter(virus == "hsv2") %>%
         left_join(obs_prop, by = vect)
     }
-    return(list(
-      "proportion" = proportion,
-      "proportion_relative" = proportion_relative
-    ))
+    detach("package:tidytable", unload = TRUE)
+    return(
+      list(
+        "proportion" = proportion %>% as_tibble(),
+        "proportion_relative" = proportion_relative %>% as_tibble()
+      )
+    )
   }
   out <- list()
   out[["pp"]][["v"]] <- fun_sum(vect = c("virus"), type = "pp")
@@ -155,49 +159,58 @@ numeric_to_text <- function(df) {
 
 # Function to compute AME -------------------------------------------------
 fun_sum_ame <- function(d, vect, input) {
+  print(length(unique(d$sample)))
+  library(tidytable)
+  setDTthreads(threads = cpudt)
   ##Proportion of GUD due to HSV-1 and HSV-2
   tmp <- d %>%
-    group_by_at(c(vect, "sampleid", "group")) %>%
+    group_by(all_of(c(vect, "sample", "group"))) %>%
     summarise(expected_n = sum(expected_n), N = sum(N)) %>%
-    group_by_at(c(vect, "sampleid")) %>%
+    group_by(all_of(c(vect, "sample"))) %>%
     arrange(group) %>%
     mutate(value = (expected_n - expected_n[1]) / N)
   
+  print(length(unique(tmp$sample)))
+  
   ame <- tmp %>%
     filter(group == 2) %>%
-    group_by_at(vect) %>%
+    group_by(all_of(vect)) %>%
     summary_draw()
   
+  #print(ame$Ndraws)
+  
   prev <- tmp  %>%
-    group_by_at(c(vect, "group")) %>%
+    group_by(all_of(c(vect, "group"))) %>%
     mutate(value = expected_n / N) %>%
     summary_draw()
   
+  #print(prev$Ndraws)
+  
   #Relative proportion of anogenital herpes due to HSV-2
   prop <- d %>%
-    group_by_at(c(vect, "sampleid", "group")) %>%
+    group_by(all_of(c(vect, "sample", "group"))) %>%
     summarise(expected_n = sum(expected_n)) %>%
-    group_by_at(c(vect[-which(vect == "virus")], "sampleid", "group")) %>%
+    group_by(all_of(c(vect[-which(vect == "virus")], "sample", "group"))) %>%
     mutate(x = ifelse(virus == "hsv2", 1, 0)) %>%
     arrange(x) %>%
     mutate(value = expected_n / (expected_n + expected_n[1])) %>%
     filter(virus == "hsv2") %>%
-    group_by_at(c(vect, "group")) %>%
+    group_by(all_of(c(vect, "group"))) %>%
     summary_draw()
   
   
   prop_ame <- d %>%
-    group_by_at(c(vect, "sampleid", "group")) %>%
+    group_by(all_of(c(vect, "sample", "group"))) %>%
     summarise(expected_n = sum(expected_n)) %>%
-    group_by_at(c(vect[-which(vect == "virus")], "sampleid", "group")) %>%
+    group_by(all_of(c(vect[-which(vect == "virus")], "sample", "group"))) %>%
     mutate(x = ifelse(virus == "hsv2", 1, 0)) %>%
     arrange(x) %>%
     mutate(value = expected_n / (expected_n + expected_n[1])) %>%
     filter(virus == "hsv2") %>%
     arrange(group) %>%
-    group_by_at(c(vect, "sampleid")) %>%
+    group_by(all_of(c(vect, "sample"))) %>%
     mutate(value = (value - value[1])) %>%
-    group_by_at(c(vect, "group")) %>%
+    group_by(all_of(c(vect, "group"))) %>%
     summary_draw()
   
   ame <- ame %>%
@@ -234,17 +247,16 @@ fun_sum_ame <- function(d, vect, input) {
       new = input$new
     )
   
-  
+  detach("package:tidytable", unload = TRUE)
   list(
-    "ame" = ame,
-    "expected_prev" = prev,
-    "prop" = prop,
-    "prop_ame" = prop_ame
+    "ame" = ame %>% as_tibble(),
+    "expected_prev" = prev %>% as_tibble(),
+    "prop" = prop %>% as_tibble(),
+    "prop_ame" = prop_ame %>% as_tibble()
   )
 }
 
-ame_function <- function(fit_input,
-                         Nsample = 100,
+ame_function <- function(model_set,
                          type_ame = "district",
                          ref_ame = "observed",
                          ref = NA,
@@ -311,47 +323,84 @@ ame_function <- function(fit_input,
         dfbinomial %>% mutate(group = 2) %>% mutate(idtime = new)
       )
     }
+  } else if (type_ame == "districttime")  {
+    data_set <- rbind(
+      dfbinomial %>% mutate(group = 1) %>% mutate(idspace = new, idtime = 1),
+      dfbinomial %>% mutate(group = 2) %>% mutate(idspace = new, idtime = max(dfdate$idtime))
+    )
   }
   
-  print(unique(data_set$idspace))
-  
-  
-  if (!exists("state")) {
-    draw <- generate(
-      object = fit_input,
-      newdata = data_set,
-      n.samples = Nsample,
-      seed = 123,
-      formula = fml
-    )
-  } else{
+  draws <- list()
+  for (i in 1:nrow(model_set)) {
+    print(i)
+    setting_paths(i)
+    print("Ndraws:")
+    print(ndrawsame)
     print("Using state")
-    draw <- inlabru::evaluate_model(
-      model = fit_input$bru_info$model,
-      state = state,
+    state_to_use <- state[seq(1, ndrawsame, by = 1L)]
+    print(length(state_to_use))
+    
+    draws[[i]] <- inlabru::evaluate_model(
+      model = info,
+      state = state_to_use,
       data = data_set,
       predictor = fml
     )
+    #draws[[i]] %>% imap(~is.null(.x))  %>% discard(., isFALSE) %>% print
+    #print(draws[[i]])
+    rm("info")
+    rm("state_to_use")
+    rm("state")
+    gc()
   }
-  
-  
-  draw <- draw %>%
-    imap( ~ cbind(.x, data_set)) %>%
-    imap( ~ .x %>% mutate(sampleid = .y)) %>%
+  gc()
+  ndraw_sim <- draws %>%
+    imap( ~ length(.x))
+  print(model_set$draws_ame)
+  print(Reduce(c, ndraw_sim))
+  print(sum(Reduce(c, ndraw_sim)))
+  print(model_set$draws_ame == Reduce(c, ndraw_sim))
+
+  library(tidytable)
+  setDTthreads(threads = cpudt)
+  draws <-  draws %>%
+    imap(function(.x, .y) {
+      m <- .y
+      .x %>%
+        imap(~ .x %>%
+               mutate(sample = paste(m, .y, sep = "_")) %>%
+               cbind(., data_set %>% st_drop_geometry())) %>%
+        do.call(rbind, .)
+    }) %>%
     do.call(rbind, .) %>%
     mutate(expected_n = p * N)
   
+  print(length(unique(draws$sample)))
+  X <- tibble(s = unique(draws$sample)) %>%
+    separate(col = s, into = c("model", "draw"), sep = "_")
+  print(table(as.numeric(X$model)))
+  print(model_set$draws_ame)
+  gc()
+  detach("package:tidytable", unload = TRUE)
+  
   out <- list()
-  out[["v"]] <- fun_sum_ame(d = draw,
+  out[["v"]] <- fun_sum_ame(d = draws,
                             vect = c("virus"),
                             input = input_list)
-  if (type_ame == "age") {
-    out[["vs"]] <- fun_sum_ame(d = draw,
-                               vect = c("virus", "sexe"),
-                               input = input_list)
-  }
-  out[["input"]] <- input_list
-  rm("draw")
   gc()
+  # if (type_ame == "age") {
+  #   out[["vs"]] <- fun_sum_ame(d = draws,
+  #                              vect = c("virus", "sexe"),
+  #                              input = input_list)
+  #   gc()
+  # }
+  out[["input"]] <- input_list
+  rm("draws")
+  gc()
+  
+  
+  test_hpc(hpc)
+  print(out$v$ame$Ndraws)
+  print(out$v$ame$checkNA)
   return(out)
 }
