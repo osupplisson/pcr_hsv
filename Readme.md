@@ -1,7 +1,7 @@
 # General description
 
 
-This repository contains the codes for the study 'Spatial heterogeneity in the proportion of genital ulcer diseases attributable to HSV-1 and HSV-2 in France, 2022-2023: a full hierarchical Bayesian approach using nationwide restrospective routinely collected data'. 
+This repository contains the codes for the study 'Spatial Epidemiology of Genital Ulcer Diseases Attributable to HSV-1 and HSV-2, France, January 2022-December 2024'. 
 
 
 
@@ -16,8 +16,8 @@ Important: Data cannot be shared due to legal constraints associated with using 
 
 # Acknowledgements
 
-We are grateful to the genotoul bioinformatics platform Toulouse Occitanie (Bioinfo Genotoul, https://doi.org/10.15454/1.5572369328961167E12) for providing help and computing and storage resources.
+We are grateful to the Genotoul bioinformatics platform Toulouse Occitanie (Bioinfo Genotoul, https://doi.org/10.15454/1.5572369328961167E12) for providing help and computing and storage resources.
 
-The authors acknowledge the  ISO 9001 certified IRD i-Trop HPC (South Green Platform) at IRD montpellier for providing HPC resources that have contributed to the research results reported within this paper. https://bioinfo.ird.fr/-http://www.southgreen.fr
+The authors acknowledge the  ISO 9001-certified IRD i-Trop HPC (South Green Platform) at IRD Montpellier for providing HPC resources that contributed to the research results reported in this paper. https://bioinfo.ird.fr/-http://www.southgreen.fr
 
-We acknowledge Bioclust, the computing cluster of PB-IBENS (LABEX MEMOLIFE members) for providing storage resources. https://www.ibens.bio.ens.psl.eu/spip.php?rubrique55#bioclust
+We acknowledge Bioclust, the computing cluster of PB-IBENS (LABEX MEMOLIFE members), for providing storage resources. https://www.ibens.bio.ens.psl.eu/spip.php?rubrique55#bioclust
